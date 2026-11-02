@@ -1,4 +1,4 @@
-// api/review.js — cola de revisión y alta de proveedores (autocontenido)
+// review.js — cola de revisión y alta de proveedores (autocontenido)
 import { createClient } from "@supabase/supabase-js";
 
 const TABLE = "candidatos_revision";
