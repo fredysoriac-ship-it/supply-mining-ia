@@ -1,0 +1,10 @@
+{
+  "name": "supply-mining-ia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Supply Mining (Free Solutions) — descubrimiento de proveedores mineros con IA (ChatGPT/Claude), backend Vercel + Supabase",
+  "dependencies": {
+    "@supabase/supabase-js": "2.45.4"
+  }
+}
