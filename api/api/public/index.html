@@ -7,4 +7,117 @@
 <style>
   :root{--line:#e5e7eb;--soft:#f8fafc;--ink:#0f172a;--muted:#64748b;--blue:#2563eb}
   *{box-sizing:border-box}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);margin
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);margin:0;padding:24px 16px;max-width:860px;margin:0 auto;background:#fff}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 18px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input,select,button{font:inherit}
+  input[type=text]{flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+  select{padding:10px;border:1px solid var(--line);border-radius:10px}
+  button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;font-weight:600}
+  button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+  button:disabled{opacity:.55;cursor:default}
+  .flag{display:inline-block;font-size:11px;font-weight:700;color:#92400e;background:#fde68a;border-radius:6px;padding:2px 8px;margin-left:8px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px}
+  .card h3{margin:0 0 4px;font-size:15px}
+  .meta{font-size:12px;color:var(--muted);margin:2px 0}
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;border-radius:5px;padding:1px 7px;margin-right:6px}
+  .pill.ok{background:#dcfce7;color:#166534}.pill.no{background:#fee2e2;color:#991b1b}
+  .caps{font-size:13px;margin:7px 0}
+  .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
+  .tabs{display:flex;gap:8px;margin:18px 0 0}
+  .tabs button.on{background:var(--soft)}
+  .qrow{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #eef2f7;padding:10px 0;font-size:13px}
+</style>
+</head>
+<body>
+  <div class="meta" style="font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--blue)">Supply Mining · Free Solutions</div>
+  <h1>Descubrimiento con IA <span class="flag">Candidatos · no verificados</span></h1>
+  <p class="sub">Cuando la base no tenga proveedores con evidencia sólida, la IA propone candidatos del mercado minero peruano para revisión y validación. No se cargan al Maestro: quedan en la cola de revisión.</p>
+
+  <div class="row">
+    <input id="q" type="text" placeholder="Describe la necesidad (ej. alquiler de camionetas 4x4 para minería)">
+    <select id="prov">
+      <option value="anthropic">Claude</option>
+      <option value="openai">ChatGPT</option>
+    </select>
+    <button class="primary" id="go">🔍 Buscar</button>
+  </div>
+
+  <div class="tabs">
+    <button id="tabRes" class="on">Resultados</button>
+    <button id="tabQueue">Cola de revisión</button>
+  </div>
+
+  <div id="out"></div>
+  <p class="note">Las sugerencias de IA pueden contener errores, incluido el RUC. Valida razón social, RUC en SUNAT y evidencia en la web propia antes de aprobar.</p>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let RESULTS = [];
+let TAB = 'res';
+
+async function discover(){
+  const q = $('#q').value.trim(); if(!q){ $('#out').innerHTML='<p class="note">Escribe una necesidad.</p>'; return; }
+  $('#go').disabled = true; $('#out').innerHTML = '<p class="note">Consultando a la IA…</p>';
+  try{
+    const r = await fetch('/api/discover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({necesidad:q,proveedor:$('#prov').value})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'error');
+    RESULTS = d.candidatos||[]; TAB='res'; setTab(); render();
+  }catch(e){ $('#out').innerHTML='<p class="note">No se pudo completar la búsqueda: '+esc(e.message)+'</p>'; }
+  finally{ $('#go').disabled=false; }
+}
+
+function cardRes(c,i){
+  const rucOk=/^\d{11}$/.test(c.ruc_estimado||'');
+  return '<div class="card"><h3>'+esc(c.razon_social)+'</h3>'
+    +'<div class="meta"><span class="pill '+(rucOk?'ok':'no')+'">RUC '+(rucOk?esc(c.ruc_estimado):'por confirmar')+'</span>'
+    +'<span class="pill '+(c.web?'ok':'no')+'">'+(c.web?('web: '+esc(c.web)):'web por confirmar')+'</span>'
+    +(c.departamento?(' · '+esc(c.departamento)):'')+'</div>'
+    +'<div class="meta"><b>'+esc(c.familia||'')+'</b>'+(c.categoria?(' › '+esc(c.categoria)):'')+'</div>'
+    +'<div class="caps"><b>Capacidades (IA):</b> '+(c.capacidades||[]).map(esc).join(' · ')+'</div>'
+    +(c.por_que?('<div class="meta"><i>'+esc(c.por_que)+'</i></div>'):'')
+    +'<button data-add="'+i+'">Enviar a revisión</button></div>';
+}
+
+async function render(){
+  const out=$('#out');
+  if(TAB==='res'){
+    out.innerHTML = RESULTS.length ? RESULTS.map(cardRes).join('') : '<p class="note">Sin resultados todavía.</p>';
+  }else{
+    out.innerHTML='<p class="note">Cargando cola…</p>';
+    try{
+      const r=await fetch('/api/review'); const d=await r.json();
+      const L=d.candidatos||[];
+      out.innerHTML = L.length ? L.map(x=>(
+        '<div class="qrow"><div><b>'+esc(x.razon_social)+'</b> <span class="meta">['+esc(x.estado)+']</span>'
+        +'<div class="meta">RUC '+(x.ruc_estimado||'por confirmar')+(x.web?(' · '+esc(x.web)):'')+(x.departamento?(' · '+esc(x.departamento)):'')+'</div>'
+        +'<div class="meta">'+esc(x.familia||'')+(x.categoria?(' › '+esc(x.categoria)):'')+'</div>'
+        +'<div class="meta">'+esc(x.capacidades||'')+'</div></div>'
+        +'<div class="row">'+(x.estado==='pendiente'?('<button data-val="'+x.id+'">Validar</button><button data-rej="'+x.id+'">Rechazar</button>'):'')
+        +'<button data-del="'+x.id+'">Quitar</button></div></div>'
+      )).join('') : '<p class="note">La cola está vacía.</p>';
+    }catch(e){ out.innerHTML='<p class="note">No se pudo cargar la cola.</p>'; }
+  }
+}
+
+function setTab(){ $('#tabRes').classList.toggle('on',TAB==='res'); $('#tabQueue').classList.toggle('on',TAB==='queue'); }
+
+document.addEventListener('click', async e=>{
+  const t=e.target;
+  if(t.id==='go') return discover();
+  if(t.id==='tabRes'){ TAB='res'; setTab(); return render(); }
+  if(t.id==='tabQueue'){ TAB='queue'; setTab(); return render(); }
+  if(t.dataset.add!=null){ const c=RESULTS[+t.dataset.add]; t.disabled=true; t.textContent='Enviando…';
+    await fetch('/api/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({candidato:{...c,necesidad:$('#q').value.trim()}})});
+    t.textContent='✓ En cola'; return; }
+  if(t.dataset.val){ await fetch('/api/review',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:t.dataset.val,estado:'validado',validado_por:'Fredy'})}); return render(); }
+  if(t.dataset.rej){ await fetch('/api/review',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:t.dataset.rej,estado:'rechazado'})}); return render(); }
+  if(t.dataset.del){ await fetch('/api/review?id='+encodeURIComponent(t.dataset.del),{method:'DELETE'}); return render(); }
+});
+$('#q').addEventListener('keydown',e=>{ if(e.key==='Enter') discover(); });
+</script>
+</body>
+</html>
